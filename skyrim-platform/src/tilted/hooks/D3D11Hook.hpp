@@ -14,6 +14,7 @@ struct D3D11Hook
   Signal<void(IDXGISwapChain*)> OnLost;
 
   static void Install() noexcept;
+  static void InstallOnSwapChain(IDXGISwapChain* pSwapChain) noexcept;
   static D3D11Hook& Get() noexcept;
 
 private:

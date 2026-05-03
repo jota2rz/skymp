@@ -8,6 +8,7 @@
 #include <OverlayClient.h>
 #include <cmrc/cmrc.hpp>
 #include <codecvt>
+#include <d3d11.h>
 #include <filesystem>
 #include <functional>
 #include <iostream>
@@ -118,11 +119,20 @@ void DX11RenderHandler::Reset()
 
 void DX11RenderHandler::Create()
 {
-  const auto hr = m_pRenderer->GetSwapChain()->GetDevice(
-    IID_ID3D11Device,
-    reinterpret_cast<void**>(m_pDevice.ReleaseAndGetAddressOf()));
+  // Get device via back buffer instead of swap chain's GetDevice.
+  // CS (Community Shaders) proxies the swap chain and its GetDevice
+  // returns E_NOINTERFACE. GetBuffer(0) returns the real back buffer
+  // from which we can obtain the actual device.
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> pBackBuffer;
+  auto hr = m_pRenderer->GetSwapChain()->GetBuffer(
+    0, IID_PPV_ARGS(pBackBuffer.GetAddressOf()));
 
   if (FAILED(hr))
+    return;
+
+  pBackBuffer->GetDevice(m_pDevice.ReleaseAndGetAddressOf());
+
+  if (!m_pDevice)
     return;
 
   m_pDevice->GetImmediateContext(m_pImmediateContext.ReleaseAndGetAddressOf());

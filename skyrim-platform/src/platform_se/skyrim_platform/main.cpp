@@ -23,6 +23,8 @@
 
 extern CallNativeApi::NativeCallRequirements g_nativeCallRequirements;
 
+static std::function<void()> g_installPresentHook;
+
 void GetTextsToDraw(TextToDrawCallback callback)
 {
   switch (TextApi::GetTextsVisibility()) {
@@ -178,6 +180,10 @@ DLLEXPORT bool SKSEAPI SKSEPlugin_Load_Impl(const SKSE::LoadInterface* skse)
     [](SKSE::MessagingInterface::Message* a_msg) {
       EventHandler::HandleSKSEMessage(a_msg);
       BrowserApiNirnLab::GetInstance().HandleSkseMessage(a_msg);
+      if (a_msg->type == SKSE::MessagingInterface::kDataLoaded) {
+        if (g_installPresentHook)
+          g_installPresentHook();
+      }
     });
 
   Hooks::Install();
@@ -552,13 +558,19 @@ public:
 
     renderSystem = std::make_shared<RenderSystemD3D11>(*overlayService);
 
-    auto manager = RE::BSRenderManager::GetSingleton();
-    if (!manager) {
-      logger::critical("Failed to retrieve BSRenderManager");
-    }
+    // NOTE: D3D11 is not yet initialized at BeginMain() time.
+    // The Present hook is installed later from kDataLoaded when D3D11 is ready.
+    auto rs = renderSystem;
+    g_installPresentHook = [rs]() {
+      auto manager = RE::BSRenderManager::GetSingleton();
+      if (!manager || !manager->swapChain)
+        return;
 
-    renderSystem->m_pSwapChain =
-      reinterpret_cast<IDXGISwapChain*>(manager->swapChain);
+      rs->m_pSwapChain =
+        reinterpret_cast<IDXGISwapChain*>(manager->swapChain);
+
+      CEFUtils::D3D11Hook::InstallOnSwapChain(rs->m_pSwapChain);
+    };
 
     return true;
   }
